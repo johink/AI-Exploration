@@ -1,6 +1,8 @@
 #Blackjack Bot
 from itertools import product
 import numpy as np
+import matplotlib.pyplot as plt
+plt.style.use('ggplot')
 
 class RandomChoiceRobot(object):
     def __init__(self):
@@ -34,16 +36,17 @@ class HeuristicRobot(object):
         pass
 
 class RLRobot:
-    def __init__(self, alpha = .5, tau = .9, epsilon = .1, training_epochs = 100000):
+    def __init__(self, alpha = .5, tau = .9, epsilon = .25, training_epochs = 100000):
         self.alpha = alpha
         self.tau = tau
         self.epsilon = epsilon
         self.action_value = {}
         points_showing = range(22)
         for myscore, dealerscore, have_ace, choice in product(points_showing, points_showing, [True, False], ["H","S"]):
-            self.action_value[(myscore, dealerscore, have_ace, choice)] = 0
+            self.action_value[(myscore, dealerscore, have_ace, choice)] = 10 #Optimistic Initial Values
 
         self.initial_train(training_epochs)
+        self.epsilon = 0
 
     def make_decision(self, my_score, dealer_score):
         if np.random.rand() < self.epsilon:
@@ -78,6 +81,14 @@ class DealerRobot:
             return "H"
 
     def update(self, state_seq, score):
+        pass
+
+#Thought about doing this but it feels unwieldy
+class Human:
+    def __init__(self, name):
+        self.name = name
+
+    def make_decision(self, my_score, dealer_score):
         pass
 
 class Card(object):
@@ -168,14 +179,16 @@ class Player(object):
 
 
 class Blackjack(object):
-    def __init__(self, n_decks, n_players, min_bet = 5, max_bet = 1000):
+    def __init__(self, n_decks, n_players, min_bet = 5, max_bet = 1000, setup = True):
         self.deck = Deck(n_decks)
         self.n_players = n_players
         self.min_bet = min_bet
         self.max_bet = max_bet
-        self.players = self.setup_players(n_players)
         self.dealer_hand = Hand()
         self.bets = []
+        if setup:
+            self.players = self.setup_players(n_players)
+            self.all_AI = all([player.robot for player in self.players])
 
     def setup_players(self, n_players):
         players = []
@@ -185,9 +198,12 @@ class Blackjack(object):
             money = float(input("How much money does Player {} have? >> ".format(i)))
             mapping = {'1': RandomChoiceRobot, '2': HeuristicRobot, '3': RLRobot, '4': DealerRobot}
             if name == "-1":
-                diff = input("What is this AI's strategy?\n1.  Random\n2.  Heuristic\n3.  Smart\n4.  Dealer\n >> ")
-                name = "FRK-3010"
-            players.append(Player(name, money, robot, mapping[diff]() if robot else None))
+                diff = -1
+                while diff not in list('1234'):
+                    diff = input("What is this AI's strategy?\n1.  Random\n2.  Heuristic\n3.  Smart\n4.  Dealer\n >> ")
+
+                name = mapping[diff].__name__
+            players.append(Player(name, money, robot, mapping[diff]() if robot else Human(name)))
         return players
 
     def reshuffle(self):
@@ -204,23 +220,45 @@ class Blackjack(object):
 
         self.dealer_hand.add_card(self.draw_and_reveal())
 
-    def play_blackjack(self):
-        playing = True
-        while playing:
+    def play_n_games(self, n):
+        stats = []
+        for _ in range(int(n)):
+            stats.append([player.money for player in self.players])
             self.place_bets()
             self.initial_deal()
             dealer_score = self.play_round()
             self.resolve_bets(dealer_score)
-            response = input("Q to quit, anything else to play another round >> ")
-            if response == "Q":
-                playing = False
-            if response == "PRINT":
-                for player in self.players:
-                    if player.AI and player.AI.action_value:
-                        print(player.AI.action_value)
-                        for state, value in player.AI.action_value.items():
-                            if value > 25 or value < -25:
-                                print(state, value)
+        return stats
+
+    def play_blackjack(self):
+        if self.all_AI:
+            n_games = input("It looks like only AI are playing, how many rounds should they play? >> ")
+            stats = self.play_n_games(n_games)
+            stats = np.array(stats)
+            fig, ax = plt.subplots()
+            for i in range(len(self.players)):
+                ax.plot(stats[:,i], label = self.players[i].name)
+
+            ax.legend()
+            plt.show()
+
+        else:
+            playing = True
+            while playing:
+                self.place_bets()
+                self.initial_deal()
+                dealer_score = self.play_round()
+                self.resolve_bets(dealer_score)
+                response = input("Q to quit, anything else to play another round >> ")
+                if response == "Q":
+                    playing = False
+                if response == "PRINT":
+                    for player in self.players:
+                        if player.AI and player.AI.action_value:
+                            print(player.AI.action_value)
+                            for state, value in player.AI.action_value.items():
+                                if value > 25 or value < -25:
+                                    print(state, value)
 
     def place_bets(self):
         bets = []
@@ -240,14 +278,14 @@ class Blackjack(object):
         return card
 
     def play_round(self):
-        print("The dealer's hand is {}".format(self.dealer_hand))
+        if not self.all_AI:
+            print("The dealer's hand is {}".format(self.dealer_hand))
         dealer_score = self.dealer_hand.score_hand(False)
         for player in self.players:
             if player.robot:
                 player.state_seq = []
             stand = False
             while not stand:
-
                 choice = player.request_choice(dealer_score)
                 if player.robot:
                     has_ace, score = player.hand.score_hand()
@@ -273,7 +311,8 @@ class Blackjack(object):
         return score
 
     def resolve_bets(self, score_to_beat):
-        print("The dealer's hand is {}".format(self.dealer_hand))
+        if not self.all_AI:
+            print("The dealer's hand is {}".format(self.dealer_hand))
         for bet, player in zip(self.bets, self.players):
             ace, score = player.hand.score_hand()
             if score <= 11 and ace:
@@ -281,22 +320,26 @@ class Blackjack(object):
 
             for card in player.hand.cards:
                 card.revealed = True
-            print("{}'s hand: {}".format(player.name, player.hand))
+            if not self.all_AI:
+                print("{}'s hand: {}".format(player.name, player.hand))
 
             if score > 21:
-                print("{} busts!".format(player.name))
+                result = "{} busts!".format(player.name)
                 winnings = -bet
             elif len(player.hand.cards) == 2 and score == 21 and score_to_beat != 21:
-                print("Blackjack! {} wins big".format(player.name))
+                result = "Blackjack! {} wins big".format(player.name)
                 player.money += 2.5 * bet
                 winnings = 1.5 * bet
             elif score_to_beat > 21 or score > score_to_beat:
-                print("{} beats the house".format(player.name))
+                result = "{} beats the house".format(player.name)
                 player.money += 2 * bet
                 winnings = bet
             else:
                 winnings = -bet
-                print("{} loses with a score of {}".format(player.name, score))
+                result = "{} loses with a score of {}".format(player.name, score)
+
+            if not self.all_AI:
+                print(result)
 
             if player.robot:
                 player.AI.update(player.state_seq, winnings)
@@ -306,6 +349,7 @@ class Blackjack(object):
 
 class BJTraining(Blackjack):
     def __init__(self, AI, epochs = 1000):
+        self.all_AI = True
         self.deck = Deck(2)
         self.n_players = 1
         self.min_bet = 50
@@ -323,5 +367,5 @@ class BJTraining(Blackjack):
             self.resolve_bets(dealer_score)
 
 if __name__ == "__main__":
-    bj = Blackjack(2, 2)
+    bj = Blackjack(n_decks = 2, n_players = 4)
     bj.play_blackjack()
