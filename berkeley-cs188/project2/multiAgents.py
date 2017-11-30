@@ -138,7 +138,7 @@ class MultiAgentSearchAgent(Agent):
         self.evaluationFunction = util.lookup(evalFn, globals())
         self.depth = int(depth)
 
-    def recursive_search(self, gameState, agentIndex, currentDepth, algo, alphaBeta = False):
+    def recursive_search(self, gameState, agentIndex, currentDepth, algo, alpha = None, beta = None):
         if currentDepth >= self.depth:
             return self.evaluationFunction(gameState)
 
@@ -148,11 +148,11 @@ class MultiAgentSearchAgent(Agent):
         if not actions:
             return self.evaluationFunction(gameState)
 
-        successors = [gameState.generateSuccessor(agentIndex, action) for action in actions]
-
         results = []
+        #print(agentIndex, currentDepth, alpha, beta)
 
-        for successor in successors:
+        for action in actions:
+            successor = gameState.generateSuccessor(agentIndex, action)
             n_agents = successor.getNumAgents()
             if agentIndex + 1 < n_agents:
                 nextAgent = agentIndex + 1
@@ -161,7 +161,28 @@ class MultiAgentSearchAgent(Agent):
                 nextAgent = 0
                 nextDepth = currentDepth + 1
 
-            results.append(self.recursive_search(successor, nextAgent, nextDepth, algo, alphaBeta))
+            result = self.recursive_search(successor, nextAgent, nextDepth, algo, alpha, beta)
+            #print(alpha, beta, result)
+
+            if alpha is not None:
+                #Pacman has next choice
+
+                if agentIndex != 0:
+                    beta = min(beta, result)
+                    if beta < alpha:
+                        #print("Alpha: {}, Beta: {}, Result: {}".format(alpha, beta, result))
+                        #print("Alpha pruned:  Agent {} at depth {}".format(agentIndex, currentDepth))
+                        return result
+
+                else:
+                    alpha = max(alpha, result)
+                    if alpha > beta:
+                        #print("Alpha: {}, Beta: {}, Result: {}".format(alpha, beta, result))
+                        #print("Beta pruned:  Agent {} at depth {}".format(agentIndex, currentDepth))
+                        return result
+
+
+            results.append(result)
 
         if agentIndex == 0 and currentDepth == 0:
             return sorted(zip(results, actions))[-1][1]
@@ -192,7 +213,7 @@ class MinimaxAgent(MultiAgentSearchAgent):
           gameState.getNumAgents():
             Returns the total number of agents in the game
         """
-        return self.recursive_search(gameState, 0, 0, "minimax", False)
+        return self.recursive_search(gameState, 0, 0, "minimax")
 
 
 
@@ -205,8 +226,7 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         """
           Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return self.recursive_search(gameState, 0, 0, "minimax", -1e6, 1e6)
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
