@@ -105,7 +105,6 @@ class ReflexAgent(Agent):
         else:
             food_score = 1. / min(food_dists) - len(food_dists)
 
-        #print ghost_score, food_score, pellet_score
         return ghost_score + food_score + pellet_score
 
 def scoreEvaluationFunction(currentGameState):
@@ -195,6 +194,12 @@ class MultiAgentSearchAgent(Agent):
             else:
                 return min(results)
 
+        if algo == "expectimax":
+            if agentIndex == 0:
+                return max(results)
+            else:
+                return float(sum(results)) / len(results)
+
 class MinimaxAgent(MultiAgentSearchAgent):
     def getAction(self, gameState):
         """
@@ -240,8 +245,7 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
           All ghosts should be modeled as choosing uniformly at random from their
           legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        return self.recursive_search(gameState, 0, 0, "expectimax")
 
 def betterEvaluationFunction(currentGameState):
     """
@@ -250,8 +254,47 @@ def betterEvaluationFunction(currentGameState):
 
       DESCRIPTION: <write something here so we know what you did>
     """
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
 
+    successorGameState = currentGameState
+    newPos = successorGameState.getPacmanPosition()
+    newFood = successorGameState.getFood().asList()
+    newGhostStates = successorGameState.getGhostStates()
+    newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
+    power_pellets = currentGameState.getCapsules()
+
+    ghost_dists = [util.manhattanDistance(newPos, ghostState.getPosition()) for ghostState in newGhostStates]
+    pellet_dists = [util.manhattanDistance(newPos, pelletPos) for pelletPos in power_pellets]
+    food_dists = [util.manhattanDistance(newPos, foodPos) for foodPos in newFood]
+
+    ghost_score = 0
+    for ghostState, scaredTime in zip(newGhostStates, newScaredTimes):
+        ghost_dist = util.manhattanDistance(newPos, ghostState.getPosition())
+        if ghost_dist == 0:
+            if scaredTime:
+                ghost_score = 10
+            else:
+                ghost_score = -200
+            break
+
+        if ghost_dist == 1 and scaredTime == 0:
+            ghost_score = -5
+            break
+
+        if scaredTime >= ghost_dist:
+            ghost_score = 2
+
+    if pellet_dists and min(pellet_dists) < 3 and min(ghost_dists) < 4 and max(newScaredTimes) == 0:
+        pellet_score = 10. / min(pellet_dists)
+    else:
+        pellet_score = 0
+
+    if not food_dists:
+        food_score = 100
+    else:
+        food_score = 1. / min(food_dists) - len(food_dists)
+
+    finish = -1e6 * (1 - int(currentGameState.isWin())) + -1e6 * (int(currentGameState.isLose()))
+
+    return ghost_score + food_score + pellet_score + finish
 # Abbreviation
 better = betterEvaluationFunction
