@@ -269,7 +269,7 @@ class ParticleFilter(InferenceModule):
         """
         Initializes a list of particles. Use self.numParticles for the number of
         particles. Use self.legalPositions for the legal board positions where a
-        particle could be located.  Particles should be randomly (not evenly)
+        particle could be located.  Particles should be evenly (not randomly)
         distributed across positions in order to ensure a uniform prior.
 
         Note: the variable you store your particles in must be a list; a list is
@@ -279,9 +279,9 @@ class ParticleFilter(InferenceModule):
         """
         "*** YOUR CODE HERE ***"
         self.particles = []
+        nLegalPos = len(self.legalPositions)
         for i in range(self.numParticles):
-            choice = random.choice(self.legalPositions)
-            self.particles.append(choice)
+            self.particles.append(self.legalPositions[i % nLegalPos])
 
 
     def observe(self, observation, gameState):
@@ -315,15 +315,28 @@ class ParticleFilter(InferenceModule):
         emissionModel = busters.getObservationDistribution(noisyDistance)
         pacmanPosition = gameState.getPacmanPosition()
         "*** YOUR CODE HERE ***"
-        beliefDist = self.getBeliefDistribution()
+        #beliefDist = self.getBeliefDistribution()
+
+        #List of particles
+        #Weight them by the likelihood
+        #Resample from the weighted list of particles
 
         if noisyDistance is None:
             self.particles = [self.getJailPosition()] * self.numParticles
         else:
-            # update beliefDist
+            weightedParticles = util.Counter()
+            for particle in self.particles:
+                trueDist = util.manhattanDistance(pacmanPosition, particle)
+                likelihood = emissionModel[trueDist]
+                weightedParticles[particle] += likelihood
+            if weightedParticles.totalCount() == 0:
+                self.initializeUniformly(gameState)
+            else:
+                items = sorted(weightedParticles.items())
+                particleDist = [i[1] for i in items]
+                particlePos = [i[0] for i in items]
+                self.particles = util.nSample(particleDist, particlePos, n = self.numParticles)
 
-        if beliefDist.totalCount() == 0:
-            self.initializeUniformly()
 
     def elapseTime(self, gameState):
         """
@@ -340,7 +353,20 @@ class ParticleFilter(InferenceModule):
         a belief distribution.
         """
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        beliefDist = self.getBeliefDistribution()
+        allPossible = util.Counter()
+
+        for oldPos in beliefDist:
+            newPosDist = self.getPositionDistribution(self.setGhostPosition(gameState, oldPos))
+            for pos, prob in newPosDist.items():
+                allPossible[pos] += prob * beliefDist[oldPos]
+
+        items = sorted(allPossible.items())
+        particleDist = [i[1] for i in items]
+        particlePos = [i[0] for i in items]
+        self.particles = util.nSample(particleDist, particlePos, n = self.numParticles)
+
 
     def getBeliefDistribution(self):
         """
@@ -353,7 +379,8 @@ class ParticleFilter(InferenceModule):
         dist = util.Counter()
         for position in self.particles:
             dist[position] += 1
-        return dist.normalize()
+        dist.normalize()
+        return dist
 
 class MarginalInference(InferenceModule):
     """
@@ -426,6 +453,12 @@ class JointParticleFilter:
         weight with each position) is incorrect and may produce errors.
         """
         "*** YOUR CODE HERE ***"
+        from itertools import product
+        from random import shuffle
+        permutations = list(product(self.legalPositions, self.legalPositions))
+        shuffle(permutations)
+        self.particles = permutations[:self.numParticles]
+
 
     def addGhostAgent(self, agent):
         """
@@ -473,6 +506,26 @@ class JointParticleFilter:
         emissionModels = [busters.getObservationDistribution(dist) for dist in noisyDistances]
 
         "*** YOUR CODE HERE ***"
+        for i in range(self.numGhosts):
+            if noisyDistances[i] is None:
+                self.particles = [self.getParticleWithGhostInJail(particle, i)
+                                        for particle in self.particles]
+            else:
+                weightedDist = util.Counter()
+                for particle in self.particles:
+                    trueDist = util.manhattanDistance(pacmanPosition, particle[i])
+                    likelihood = emissionModels[i][trueDist]
+                    weightedDist[particle] += likelihood
+
+                if weightedDist.totalCount() == 0:
+                    self.initializeParticles()
+                else:
+                    items = sorted(weightedDist.items())
+                    particleDist = [i[1] for i in items]
+                    particlePos = [i[0] for i in items]
+                    self.particles = util.nSample(particleDist, particlePos,
+                                                n = self.numParticles)
+
 
     def getParticleWithGhostInJail(self, particle, ghostIndex):
         """
@@ -534,13 +587,25 @@ class JointParticleFilter:
 
             "*** YOUR CODE HERE ***"
 
+            for i in range(self.numGhosts):
+
+                newPosDist = getPositionDistributionForGhost(
+                    setGhostPositions(gameState, oldParticle), i, self.ghostAgents[i]
+                )
+                nextPos = util.sample(newPosDist)
+                newParticle[i] = nextPos
+
             "*** END YOUR CODE HERE ***"
             newParticles.append(tuple(newParticle))
         self.particles = newParticles
 
     def getBeliefDistribution(self):
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        dist = util.Counter()
+        for position in self.particles:
+            dist[position] += 1
+        dist.normalize()
+        return dist
 
 # One JointInference module is shared globally across instances of MarginalInference
 jointInference = JointParticleFilter()
