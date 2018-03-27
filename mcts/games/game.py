@@ -1,3 +1,4 @@
+from copy import deepcopy
 from random import choice
 
 
@@ -16,7 +17,7 @@ class Game:
         Returns a copy of the state, so that agents can manipulate it as
         they decide on actions.
         """
-        raise NotImplementedError()
+        return deepcopy(self)
 
     def get_legal_actions(self, agent_id):
         """
@@ -33,7 +34,7 @@ class Game:
 
     def take_action(self, action):
         """
-        Returns an updated state based on the given action
+        Updates the state of the board in place.
         """
         raise NotImplementedError()
 
