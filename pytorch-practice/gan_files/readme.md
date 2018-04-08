@@ -19,3 +19,11 @@ Anyway, I feel like I learned a good bit more about PyTorch and GANs, and that w
 Was really hoping to see the health value decrease when interpolating to the "taking damage" screen, but no such luck!  It seems certain health/armor values were also over-represented in the frames...
 
 ![Interpolation](img/interpolate.png)
+
+
+
+Implemented ideas from the following papers:
+
+Sampling Generative Networks - https://arxiv.org/abs/1609.04468
+
+Unsupervised Representation Learning with Deep Convolutional GANs - https://arxiv.org/pdf/1511.06434.pdf
