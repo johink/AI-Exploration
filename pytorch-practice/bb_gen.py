@@ -1,22 +1,30 @@
 """
 TODO:
 --Add label to top left of bbox
-Resize images, make bbox coordinates relative (0, 1)
-Ignore boxes that are obviously just a misclick
-Change focus to toplevel automatically
-Make bbox output JSON
-Add button to move to next frame
+--Resize images
+--make bbox coordinates relative (0, 1)
+--Ignore boxes that are obviously just a misclick
+--Change focus to toplevel automatically
+--Press enter to confirm bb
+--Make bbox output JSON
+--Add button to move to next frame
 """
 
 import tkinter
 import imageio
+import sys
 
 from pathlib import Path
 from tkinter import *
 from PIL import ImageTk, Image
 import json
 
-video_path = Path("c:/users/john/desktop/ai-exploration/pytorch-practice/data/doom_gameplay.mp4")
+if len(sys.argv) != 2:
+    raise RuntimeError("Must pass path to video file.\nUsage: `python bb_gen.py video.mp4`")
+
+PIC_SIZE = (1200, 675)
+
+video_path = Path(sys.argv[1])
 bookmark_path = Path("frame_num.txt")
 anno_path = Path("annotations.json")
 
@@ -61,6 +69,7 @@ start_pos = None
 draw_start = None
 canvas = None
 rectangles = []
+labels = []
 last_coord = None
 last_class = None
 img = None
@@ -73,6 +82,11 @@ def release(event):
     global start_pos
     xs = sorted([start_pos[0], event.x])
     ys = sorted([start_pos[1], event.y])
+
+    if abs(xs[0] - xs[1]) <= 10 and abs(ys[0] - ys[1]) <= 10:
+        start_pos = None
+        draw_rectangles()
+        return
 
     coords = (xs[0], ys[0], xs[1], ys[1])
 
@@ -105,19 +119,25 @@ def show_popup():
 
     entry1 = Entry(toplevel)
     entry1.pack()
+    entry1.focus_set()
 
     button1 = Button(toplevel, text = "Confirm", command = lambda: write_and_close(toplevel))
     button1.pack()
+
+    toplevel.bind("<Return>", lambda event: write_and_close(toplevel))
 
 def write_and_close(toplevel):
     global last_class
     last_class = toplevel.winfo_children()[1].get()
 
+    x1, x2 = map(lambda x: x / PIC_SIZE[0], [last_coord[0], last_coord[2]])
+    y1, y2 = map(lambda x: x / PIC_SIZE[1], [last_coord[1], last_coord[3]])
+
     print("BB at {} contains {}".format(last_coord, last_class))
     d = {
     "label": last_class,
     "image_id": frame_num,
-    "bbox": list(last_coord)
+    "bbox": [x1, y1, x2, y2]
     }
     annotations.append(d)
     print(annotations)
@@ -127,6 +147,37 @@ def write_and_close(toplevel):
 def write_label_to_bbox():
     lab = Label(canvas, text = last_class, fg = "yellow", bg = "black")
     lab.place(x = last_coord[0], y = last_coord[1])
+    labels.append(lab)
+
+def previous_frame(event):
+    #print("Prior frame")
+    if frame_num > 0:
+        change_frame(frame_num - 1)
+
+def next_frame(event):
+    #print("Next frame")
+    if frame_num + 1 < len(frames):
+        change_frame(frame_num + 1)
+
+def back60(event):
+    change_frame(max(0, frame_num - 60))
+
+def forward60(event):
+    change_frame(min(len(frames)-1, frame_num + 60))
+
+def change_frame(target_frame):
+    for label in labels:
+        label.destroy()
+    global frame_num
+    frame_num = target_frame
+    data = frames.get_data(frame_num)
+    raw = Image.fromarray(data, "RGB").resize(PIC_SIZE)
+    global img
+    img = ImageTk.PhotoImage(raw)
+    draw_image()
+    with open(bookmark_path, "w") as f:
+        f.write(str(frame_num))
+    json.dump(annotations, open(anno_path, "w"))
 
 def main():
     root = Tk()
@@ -138,7 +189,7 @@ def main():
     canvas.pack(fill = BOTH, expand = 1)
 
     data = frames.get_data(frame_num)
-    raw = Image.fromarray(data, "RGB").resize((1200, 675))
+    raw = Image.fromarray(data, "RGB").resize(PIC_SIZE)
     global img
     img = ImageTk.PhotoImage(raw)
     draw_image()
@@ -146,6 +197,10 @@ def main():
     canvas.bind("<Button-1>", click)
     canvas.bind("<ButtonRelease-1>", release)
     canvas.bind("<B1-Motion>", drag)
+    root.bind("<Left>", previous_frame)
+    root.bind("<Right>", next_frame)
+    root.bind("<Home>", back60)
+    root.bind("<End>", forward60)
 
     root.mainloop()
 
