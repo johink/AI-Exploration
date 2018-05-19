@@ -168,6 +168,7 @@ def forward60(event):
 def change_frame(target_frame):
     for label in labels:
         label.destroy()
+    rectangles.clear()
     global frame_num
     frame_num = target_frame
     data = frames.get_data(frame_num)
