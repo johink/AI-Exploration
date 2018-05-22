@@ -22,11 +22,12 @@ import json
 if len(sys.argv) != 2:
     raise RuntimeError("Must pass path to video file.\nUsage: `python bb_gen.py video.mp4`")
 
-PIC_SIZE = (1200, 675)
+PIC_SIZE = (640, 360)
 
 video_path = Path(sys.argv[1])
 bookmark_path = Path("frame_num.txt")
 anno_path = Path("annotations.json")
+del_path = Path("removed.json")
 
 if not bookmark_path.exists():
     with open(bookmark_path, "w") as f:
@@ -39,7 +40,12 @@ if not anno_path.exists():
     with open(anno_path, "w") as f:
         f.write("[]")
 
+if not del_path.exists():
+    with open(del_path, "w") as f:
+        f.write("[]")
+
 annotations = json.load(open(anno_path))
+del_frames = json.load(open(del_path))
 
 frames = imageio.get_reader(video_path,  'ffmpeg')
 
@@ -140,7 +146,7 @@ def write_and_close(toplevel):
     "bbox": [x1, y1, x2, y2]
     }
     annotations.append(d)
-    print(annotations)
+    print(annotations[-1])
     toplevel.destroy()
     write_label_to_bbox()
 
@@ -179,10 +185,35 @@ def change_frame(target_frame):
     with open(bookmark_path, "w") as f:
         f.write(str(frame_num))
     json.dump(annotations, open(anno_path, "w"))
+    print("Frame {} of {}".format(frame_num, len(frames)))
+
+def remove_from_dataset(event):
+    print("Adding {} to the deleted frames array".format(frame_num))
+    del_frames.append(frame_num)
+    json.dump(del_frames, open(del_path, "w"))
+    next_frame(None)
+
+def undo_bbox(event):
+    if labels:
+        labels[-1].destroy()
+        rectangles.pop()
+        annotations.pop()
+        draw_rectangles()
+
+def undo_remove(event):
+    if del_frames:
+        fnum = del_frames.pop()
+        print("Removing {} from the deleted frames array".format(fnum))
+
+def print_last(event):
+    if annotations:
+        print("Last annotation is:\n{}".format(annotations[-1]))
+    if del_frames:
+        print("Last element of deleted frames array is {}".format(del_frames[-1]))
 
 def main():
     root = Tk()
-    root.geometry("1200x675")
+    root.geometry("x".join(map(str, PIC_SIZE)))
     root.title("testing123")
 
     global canvas
@@ -202,6 +233,10 @@ def main():
     root.bind("<Right>", next_frame)
     root.bind("<Home>", back60)
     root.bind("<End>", forward60)
+    root.bind("<Escape>", remove_from_dataset)
+    root.bind("<F12>", undo_bbox)
+    root.bind("<F10>", undo_remove)
+    root.bind("<space>", print_last)
 
     root.mainloop()
 
